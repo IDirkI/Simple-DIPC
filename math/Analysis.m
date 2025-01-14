@@ -32,8 +32,8 @@ B_r = iM0 * [1;0;0];
 Wd_r = iM0;
 
 
-%   q̇ = A.q + B.u + Wd.w
-%   y = C.q + D.u + Wd.w + Wn.v
+%   q̇ = A.q + B.u + Wd.wd
+%   y = C.q + D.u + Wn.wn
 A = [  zeros(3, 3) eye(3, 3)   
            A_r        D      ]; % A matrix infront of the q term
 B = [ zeros(3,1)
@@ -41,43 +41,38 @@ B = [ zeros(3,1)
 Wd = [ zeros(3,3)
         Wd_r     ];  % Wd matrix infront of the w_d disturbance term
 C = [ eye(2,2) zeros(2,4) ]; % Reduced observability matrix 
-D = [0];
+D = [ 0 ];
 
 %% System
-Plant = ss(A, B, C, D);
-Plant.InputName = 'u_n';
-Plant.OutputName = 'y';
+Q = [ 10  0  0  0  0  0
+       0 100 0  0  0  0
+       0  0  1  0  0  0
+       0  0  0  1  0  0
+       0  0  0  0  1  0
+       0  0  0  0  0  1 ]; % State Cost
+R = 1;          % Actuator Cost
 
-Sum = sumblk('u_n = u + w');
-sys = connect(Plant, Sum, {'u', 'w'}, 'y');
+Rn = [ 1   0  
+       0  1.3 ];    %  Noise Covariance
+Qn = 1;             %  Disturbance Covariance
 
-Qn = 1;
-Rn = 1;
-[Kfilt, L, P] = kalman(sys, Qn, Rn);
-size(Kfilt)
+% Plant & System
+Plant = ss(A, B, C, D, -1);
+Plant.InputName = 'u_d';
+Plant.OutputName = 'yt';
 
-Q = [1 0 0 0 0 0
-     0 100 0 0 0 0
-     0 0 0 0 0 0
-     0 0 0 0 0 0
-     0 0 0 0 0 0
-     0 0 0 0 0 0 ];
-R = 10;
+Sum = sumblk('u_d = u + w');
+sys = connect(Plant, Sum, {'u', 'w'}, 'yt');
 
-[K, S, Pr] = lqr(sys, Q, R);
+% LQR Gain
+K = lqr(sys, Q, R);
+K = K(1, :);
 
-regulator = lqgreg(Kfilt, K);
+% Kalman Filter
+[Kf, L, P] = kalman(sys, Qn, Rn);
 
-regulator.InputName
-
-%% Controllability & Observability
-
-%% LQR Controller
-
-
-
-
-
+% LQG Regulator
+regulator = lqgreg(Kf, K);
 
 
 
