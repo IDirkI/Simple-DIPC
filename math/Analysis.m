@@ -38,43 +38,57 @@ A = [  zeros(3, 3) eye(3, 3)
            A_r        D      ]; % A matrix infront of the q term
 B = [ zeros(3,1)
          B_r     ];  % B matrix infront of the u term
-Wd = [ zeros(3,3)
-        Wd_r     ];  % Wd matrix infront of the w_d disturbance term
+Wd = [ zeros(3, 1)
+        Wd_r(:, 1)     ];  % Wd matrix infront of the w_d disturbance term
 C = [ eye(2,2) zeros(2,4) ]; % Reduced observability matrix 
 D = [ 0 ];
 
 %% System
-Q = [ 10  0  0  0  0  0
-       0 100 0  0  0  0
-       0  0  1  0  0  0
-       0  0  0  1  0  0
-       0  0  0  0  1  0
-       0  0  0  0  0  1 ]; % State Cost
-R = 1;          % Actuator Cost
+Q = [ 10  0   0   0   0   0
+       0 100  0   0   0   0
+       0  0  100  0   0   0
+       0  0   0  10   0   0
+       0  0   0   0  10   0
+       0  0   0   0   0  10 ]; % State Cost
+R = 10000;          % Actuator Cost
 
-Rn = [ 1   0  
-       0  1.3 ];    %  Noise Covariance
-Qn = 1;             %  Disturbance Covariance
+Rn = [ 1  0
+       0 1.3];      %  Measurement Noise Covariance
+Qn = 1;             %  Process Disturbance Covariance
 
-% Plant & System
-Plant = ss(A, B, C, D, -1);
-Plant.InputName = 'u_d';
-Plant.OutputName = 'yt';
+% Controller
+K = lqr(A, B, Q, R);
 
-Sum = sumblk('u_d = u + w');
-sys = connect(Plant, Sum, {'u', 'w'}, 'yt');
+% Plant & Open Loop System
+plant = ss(A, B, C, D);
+plant.InputName = 'u_d';
+plant.OutputName = 'yt';
+plant.StateName = {'x1', 'x2', 'x3', 'x4', 'x5', 'x6'};
 
-% LQR Gain
-K = lqr(sys, Q, R);
-K = K(1, :);
+sum_disturb = sumblk('u_d = u + w');
+sum_noise = sumblk('y = yt + v', 2);
 
-% Kalman Filter
-[Kf, L, P] = kalman(sys, Qn, Rn);
+sys_dist = connect(plant, sum_disturb, {'u', 'w'}, 'yt');
+sys_o = connect(sys_dist, sum_noise, {'u', 'w', 'v'}, 'y');
 
-% LQG Regulator
-regulator = lqgreg(Kf, K);
+% K-Filter & LQG regulator
+[Kf, L, P] = kalman(sys_o, Qn, Rn);
 
+reg = lqgreg(Kf, K);
 
+% Feedback System
+sys = connect(sys_o, reg, {'u', 'w', 'v'}, 'y');
+sys_tf = tf(sys);
+
+% Controllability and Observability
+G_c = ctrb(sys);
+G_o = obsv(sys);
+Nc = rank(G_c);
+No = rank(G_o);
+
+%% Analysis
+% x-Impulse
+impulse(sys)
 
 
 
